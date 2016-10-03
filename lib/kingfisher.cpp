@@ -21,10 +21,23 @@ namespace bmf {
 
 void dmp_process_write(kingfisher_t *kfp, kstring_t *ks, tmpbuffers_t *bufs, int is_rev)
 {
-    int i, diffs(kfp->length * kfp->readlen);
+    int i, j, diffs(kfp->length * kfp->readlen), maxindex;
+    double pvalues[5], cmax;
     for(i = 0; i < kfp->readlen; ++i) {
-        const int argmaxret(kfp_argmax(kfp, i));
-        const int index(argmaxret + i * 5);
+        const int offset((i<<2) + i);
+        cmax = 0.;
+        maxindex = 0;
+        for(j = 0; j < 5; ++j) {
+            if(kfp->phred_sums[offset + j] > cmax) cmax = kfp->phred_sums[offset + j], maxindex = j;
+            pvalues[i] = igamc_pvalues(kfp->length, LOG10_TO_CHI2(kfp->phred_sums[offset + j]));
+        }
+        bufs->cons_quals[i] = pvalue_to_phred(pvalues[maxindex]);
+        for(j = 0; j < 5; ++j) if(j != maxindex) pvalues[maxindex] /= pvalues[j];
+        bufs->agrees[i] = kfp->nuc_counts[maxindex + offset];
+        diffs -= bufs->agrees[i];
+        if(maxindex != 4) diffs -= kfp->nuc_counts[offset + maxindex];
+        if(bufs->cons_quals[i] < 3 || (double)bufs->agrees[i] / kfp->length < MIN_FRAC_AGREED)
+            bufs->cons_quals[i] = 2, bufs->cons_seq_buffer[i] = 'N';
         dmp_pos(kfp, bufs, argmaxret, i, index, diffs);
     }
     ksprintf(ks, "@%s ", kfp->barcode + 1);
