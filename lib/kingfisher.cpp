@@ -5,30 +5,16 @@
 
 namespace bmf {
 
-#define dmp_pos(kfp, bufs, argmaxret, i, index, diffcount)\
-    do {\
-        bufs->cons_quals[i] = pvalue_to_phred(igamc_pvalues(kfp->length, LOG10_TO_CHI2((kfp->phred_sums[index]))));\
-        bufs->agrees[i] = kfp->nuc_counts[index];\
-        diffcount -= bufs->agrees[i];\
-        if(argmaxret != 4) diffcount -= kfp->nuc_counts[i * 5 + 4]; /*(Skip Ns in counting diffs) */\
-        if(bufs->cons_quals[i] > 2 && (double)bufs->agrees[i] / kfp->length > MIN_FRAC_AGREED) {\
-            bufs->cons_seq_buffer[i] = num2nuc(argmaxret);\
-        } else {\
-            bufs->cons_quals[i] = 2;\
-            bufs->cons_seq_buffer[i] = 'N';\
-        }\
-    } while(0)
-
 void dmp_process_write(kingfisher_t *kfp, kstring_t *ks, tmpbuffers_t *bufs, int is_rev)
 {
     int i, j, diffs(kfp->length * kfp->readlen), maxindex;
-    double pvalues[5], cmax;
+    double pvalues[5], cmin;
     for(i = 0; i < kfp->readlen; ++i) {
         const int offset((i<<2) + i);
-        cmax = 0.;
-        maxindex = 0;
+        cmin = 0.;
+        maxindex = 4;
         for(j = 0; j < 5; ++j) {
-            if(kfp->phred_sums[offset + j] > cmax) cmax = kfp->phred_sums[offset + j], maxindex = j;
+            if(kfp->phred_sums[offset + j] > cmin) cmin = kfp->phred_sums[offset + j], maxindex = j;
             pvalues[i] = igamc_pvalues(kfp->length, LOG10_TO_CHI2(kfp->phred_sums[offset + j]));
         }
         bufs->cons_quals[i] = pvalue_to_phred(pvalues[maxindex]);
@@ -38,7 +24,6 @@ void dmp_process_write(kingfisher_t *kfp, kstring_t *ks, tmpbuffers_t *bufs, int
         if(maxindex != 4) diffs -= kfp->nuc_counts[offset + maxindex];
         if(bufs->cons_quals[i] < 3 || (double)bufs->agrees[i] / kfp->length < MIN_FRAC_AGREED)
             bufs->cons_quals[i] = 2, bufs->cons_seq_buffer[i] = 'N';
-        dmp_pos(kfp, bufs, argmaxret, i, index, diffs);
     }
     ksprintf(ks, "@%s ", kfp->barcode + 1);
     kfill_both(kfp->readlen, bufs->agrees, bufs->cons_quals, ks);
@@ -105,29 +90,45 @@ int kf_hamming(kingfisher_t *kf1, kingfisher_t *kf2) {
 void zstranded_process_write(kingfisher_t *kfpf, kingfisher_t *kfpr, kstring_t *ks, tmpbuffers_t *bufs)
 {
     const int FM (kfpf->length + kfpr->length);
-    int diffs(FM * kfpf->readlen), index, i;
+    int diffs(FM * kfpf->readlen), i, j, fwidx, rvidx, offset;
+    double fwmax, rvmax;
     for(i = 0; i < kfpf->readlen; ++i) {
-        const int argmaxretf(kfp_argmax(kfpf, i)); // Forward consensus nucleotide
-        const int argmaxretr(kfp_argmax(kfpr, i)); // Reverse consensus nucleotide
-        if(argmaxretf == argmaxretr) { // Both strands supported the same base call.
-            index = i * 5 + argmaxretf;
-            kfpf->phred_sums[index] += kfpr->phred_sums[index];
-            kfpf->nuc_counts[index] += kfpr->nuc_counts[index];
-            dmp_pos(kfpf, bufs, argmaxretf, i, index, diffs);
-            if(kfpr->max_phreds[index] > kfpf->max_phreds[index]) kfpf->max_phreds[index] = kfpr->max_phreds[index];
-        } else if(argmaxretf == 4) { // Forward is N'd and reverse is not. Reverse call is probably right.
-            index = i * 5 + argmaxretr;
-            kfpf->phred_sums[index] += kfpr->phred_sums[index];
-            kfpf->nuc_counts[index] += kfpr->nuc_counts[index];
-            dmp_pos(kfpf, bufs, argmaxretr, i, index, diffs);
-            kfpf->max_phreds[index] = kfpr->max_phreds[index];
-        } else if(argmaxretr == 4) { // Forward is N'd and reverse is not. Reverse call is probably right.
-            index = i * 5 + argmaxretf;
-            kfpf->phred_sums[index] += kfpr->phred_sums[index];
-            kfpf->nuc_counts[index] += kfpr->nuc_counts[index];
-            dmp_pos(kfpf, bufs, argmaxretf, i, index, diffs);
-            // Don't update max_phreds, since the max phred is already here.
-        } else bufs->cons_quals[i] = 0, bufs->agrees[i] = 0, bufs->cons_seq_buffer[i] = 'N';
+        offset = (i << 2) + i;
+        double pvalues[5];
+        fwidx = rvidx = 4; // Defaulting to N if no observations elsewhere found.
+        fwmax = rvmax = 0.;
+        for(j = 0; j < 4; ++j) {
+            if(kfpf->phred_sums[offset + j] > fwmax) fwmax = kfpf->phred_sums[offset + j], fwidx = j;
+            if(kfpr->phred_sums[offset + j] > rvmax) rvmax = kfpr->phred_sums[offset + j], rvidx = j;
+        }
+        if(fwidx == rvidx) {
+            pvalues[i] = igamc_pvalues(kfpr->length + kfpf->length, LOG10_TO_CHI2(kfpf->phred_sums[offset + fwidx] + kfpr->phred_sums[offset + rvidx]));
+            for(j = 0; j < 4; ++j) if(j != fwidx) pvalues[i] /= igamc_pvalues(kfpr->length + kfpf->length, kfpf->phred_sums[offset + j] + kfpr->phred_sums[offset + j]);
+            bufs->cons_quals[i] = pvalue_to_phred(pvalues[i]);
+            bufs->agrees[i] = kfpf->phred_sums[offset + fwidx] + kfpr->phred_sums[offset + rvidx];
+            bufs->cons_seq_buffer[i] = kfpf->max_phreds[offset + rvidx] < kfpr->max_phreds[offset + rvidx] ? kfpr->max_phreds[offset + rvidx]: kfpf->max_phreds[offset + rvidx];
+        } else if(fwidx == 4) {
+            pvalues[i] = igamc_pvalues(kfpr->length, LOG10_TO_CHI2(kfpr->phred_sums[offset + rvidx]));
+            for(j = 0; j < 4; ++j) if(j != rvidx) pvalues[i] /= igamc_pvalues(kfpr->length, kfpr->phred_sums[offset + j]);
+            bufs->cons_quals[i] = pvalue_to_phred(pvalues[i]);
+            bufs->agrees[i] = kfpr->phred_sums[offset + rvidx];
+            diffs -= kfpf->length; // Don't count bases from masked read at position for diffs.
+            bufs->cons_seq_buffer[i] = kfpr->max_phreds[offset + rvidx];
+        } else if(rvidx == 4) {
+            pvalues[i] = igamc_pvalues(kfpf->length, LOG10_TO_CHI2(kfpf->phred_sums[offset + fwidx]));
+            for(j = 0; j < 4; ++j) if(j != fwidx) pvalues[i] /= igamc_pvalues(kfpf->length, kfpf->phred_sums[offset + j]);
+            bufs->cons_quals[i] = pvalue_to_phred(pvalues[i]);
+            bufs->agrees[i] = kfpf->nuc_counts[offset + fwidx];
+            diffs -= kfpr->length; // Don't count bases from masked read at position for diffs.
+            bufs->cons_seq_buffer[i] = kfpf->max_phreds[offset + fwidx];
+        } else {
+            pvalues[i] = 2;
+            bufs->cons_quals[i] = pvalue_to_phred(pvalues[i]);
+            bufs->agrees[i] = 0;
+            diffs -= kfpr->length + kfpf->length; // Don't count bases from masked read at position for diffs.
+            bufs->cons_seq_buffer[i] = 'N';
+        }
+        diffs -= bufs->agrees[i];
     }
     ksprintf(ks, "@%s ", kfpf->barcode + 1);
     // Add read name
