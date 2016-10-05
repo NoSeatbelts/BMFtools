@@ -329,7 +329,6 @@ sprintf(mode, level > 0 ? "wb%i": "wT", level % 10);
 
     kstring_t ks1{0, 0, nullptr};
     kstring_t ks2{0, 0, nullptr};
-    tmpbuffers_t tmp;
     kingfisher_hash_t *t2(nullptr);
     HASH_ITER(hh, hash1f, ce1, tmp_hk1) {
         HASH_FIND_STR(hash1r, ce1->id, t2);

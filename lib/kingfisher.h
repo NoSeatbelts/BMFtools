@@ -30,7 +30,6 @@ struct tmpvars_t {
     int blen;
     int readlen;
     char key[MAX_BARCODE_LENGTH + 1];
-    tmpbuffers_t buffers;
     struct tmpbuffers_t {
         char name_buffer[120];
         char PVBuffer[1000];
@@ -38,7 +37,7 @@ struct tmpvars_t {
         char cons_seq_buffer[SEQBUF_SIZE];
         uint32_t cons_quals[SEQBUF_SIZE];
         uint16_t agrees[SEQBUF_SIZE];
-    };
+    } buffers;
     tmpvars_t(char *bs_ptr, int blen_, int readlen_): bs_ptr(bs_ptr), blen(blen_), readlen(readlen_) {
         buffers.name_buffer[0] = '@';
         buffers.name_buffer[blen] = '\0';
@@ -58,8 +57,8 @@ struct kingfisher_t {
 };
 
 
-void zstranded_process_write(kingfisher_t *kfpf, kingfisher_t *kfpr, kstring_t *ks, tmpbuffers_t *bufs);
-void dmp_process_write(kingfisher_t *kfp, kstring_t *ks, tmpbuffers_t *bufs, int is_rev);
+void zstranded_process_write(kingfisher_t *kfpf, kingfisher_t *kfpr, kstring_t *ks, tmpvars_t *bufs);
+void dmp_process_write(kingfisher_t *kfp, kstring_t *ks, tmpvars_t *bufs, int is_rev);
 int kf_hamming(kingfisher_t *kf1, kingfisher_t *kf2);
 
 static inline void kfill_both(int readlen, uint16_t *agrees, uint32_t *quals, kstring_t *ks)
