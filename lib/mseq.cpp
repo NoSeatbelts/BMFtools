@@ -6,9 +6,11 @@ namespace bmf {
 
 void mseq_destroy(mseq_t *mvar)
 {
+    free(mvar->name.s);
+    free(mvar->comment.s);
+    free(mvar->seq.s);
+    free(mvar->qual.s);
     // Note: does not free barcode, as that is owned by another.
-    mvar->l = 0;
-    mvar->blen = 0;
     free(mvar);
 }
 
@@ -29,15 +31,15 @@ mseq_t *mseq_init(kseq_t *seq, char *rescaler, int is_read2)
         exit(EXIT_FAILURE);
     }
     mseq_t *ret((mseq_t *)calloc(1, sizeof(mseq_t)));
-    strcpy(ret->name, seq->name.s);
-    strcpy(ret->comment, seq->comment.s);
-    strcpy(ret->seq, seq->seq.s);
-    strcpy(ret->qual, seq->qual.s);
+    kputsn(&ret->name, seq->name.l, seq->name.s);
+    kputsn(&ret->comment, seq->comment.l, seq->comment.s);
+    kputsn(&ret->seq, seq->seq.l, seq->seq.s);
+    kputsn(&ret->qual, seq->qual.l, seq->qual.s);
 
     ret->l = seq->seq.l;
     if(rescaler)
-        for(int i = 0; i < ret->l; i++)
-            ret->qual[i] = rescale_qscore(is_read2 , seq->qual.s[i], i, ret->seq[i], seq->seq.l, rescaler);
+        for(int i(0); i < ret->l; i++)
+            ret->qual.s[i] = rescale_qscore(is_read2 , seq->qual.s[i], i, ret->seq[i], seq->seq.l, rescaler);
     return ret;
 }
 

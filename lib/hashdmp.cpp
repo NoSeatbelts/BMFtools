@@ -50,13 +50,6 @@ void inmem_usage()
 tmpvars_t *init_tmpvars_p(char *bs_ptr, int blen, int readlen)
 {
     tmpvars_t *ret((tmpvars_t *)calloc(1, sizeof(tmpvars_t)));
-    ret->blen = blen;
-    ret->readlen = readlen;
-    ret->bs_ptr = bs_ptr;
-    ret->buffers = (tmpbuffers_t *)malloc(sizeof(tmpbuffers_t));
-    ret->buffers->name_buffer[0] = '@';
-    ret->buffers->name_buffer[blen] = '\0';
-    ret->buffers->cons_seq_buffer[readlen] = '\0';
     return ret;
 }
 

@@ -24,23 +24,26 @@ namespace bmf {
 
 const double MIN_FRAC_AGREED = 0.5; // Minimum fraction of bases agreed in a family to not "N" the base.
 
-struct tmpbuffers_t {
-    char name_buffer[120];
-    char PVBuffer[1000];
-    char FABuffer[1000];
-    char cons_seq_buffer[SEQBUF_SIZE];
-    uint32_t cons_quals[SEQBUF_SIZE];
-    uint16_t agrees[SEQBUF_SIZE];
-};
-
 
 struct tmpvars_t {
     char *bs_ptr;
     int blen;
     int readlen;
     char key[MAX_BARCODE_LENGTH + 1];
-    int l; // For holding ret value for seq.
-    tmpbuffers_t *buffers;
+    tmpbuffers_t buffers;
+    struct tmpbuffers_t {
+        char name_buffer[120];
+        char PVBuffer[1000];
+        char FABuffer[1000];
+        char cons_seq_buffer[SEQBUF_SIZE];
+        uint32_t cons_quals[SEQBUF_SIZE];
+        uint16_t agrees[SEQBUF_SIZE];
+    };
+    tmpvars_t(char *bs_ptr, int blen_, int readlen_): bs_ptr(bs_ptr), blen(blen_), readlen(readlen_) {
+        buffers.name_buffer[0] = '@';
+        buffers.name_buffer[blen] = '\0';
+        buffers.cons_seq_buffer[readlen] = '\0';
+    }
 };
 
 

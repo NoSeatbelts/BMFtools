@@ -8,7 +8,7 @@
 #include "lib/rescaler.h"
 
 
-#define MAX_BARCODE_LENGTH 30 // Maximum expected inline barcode
+#define MAX_BARCODE_LENGTH 31 // Maximum expected inline barcode
 
 #ifndef KSEQ_DEC_GZ
 #define KSEQ_DEC_GZ
@@ -21,13 +21,13 @@ namespace bmf {
  * A mutable kseq clone, roughly. Holds seq, qual, name, and other information
  */
 struct mseq_t {
-    char name[100];
-    char comment[2000];
-    char seq[300];
-    char qual[300];
+    kstring_t name;
+    kstring_t comment;
+    kstring_t seq;
+    kstring_t qual;
     char barcode[MAX_BARCODE_LENGTH + 1];
-    int l;
-    int blen;
+    int l:16;
+    int blen:16;
 };
 
 struct tmp_mseq_t {

@@ -68,8 +68,6 @@ static inline void destroy_kf(kingfisher_t *kfp)
     free(kfp);
 }
 
-tmpvars_t *init_tmpvars_p(char *bs_ptr, int blen, int readlen);
-
 
 static inline void tmpvars_destroy(tmpvars_t *tmp)
 {
