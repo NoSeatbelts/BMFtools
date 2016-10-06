@@ -29,8 +29,8 @@ const double MIN_FRAC_AGREED = 0.5; // Minimum fraction of bases agreed in a fam
 
 
 struct tmpvars_t {
-    int blen;
-    int readlen;
+    uint32_t blen:16;
+    uint32_t readlen:16;
     char key[MAX_BARCODE_LENGTH + 1];
     struct tmpbuffers_t {
         char name_buffer[120];
@@ -54,9 +54,9 @@ struct kingfisher_t {
     uint32_t *phred_sums; // Sums of -10log10(p-value)
     char *max_phreds; // Maximum phred score observed at position. Use this as the final sequence for the quality to maintain compatibility with GATK and other tools.
     char barcode[MAX_BARCODE_LENGTH + 1];
-    int length:16; // Number of reads in family
-    int readlen:12; // Length of reads
-    int pass_fail:8;
+    uint32_t length:16; // Number of reads in family
+    uint32_t readlen:12; // Length of reads
+    uint32_t pass_fail:8;
 };
 
 static inline void destroy_kf(kingfisher_t *kfp)

@@ -194,7 +194,7 @@ sprintf(mode, level > 0 ? "wb%i": "wT", level % 10);
     kingfisher_hash_t *ce2((kingfisher_hash_t *)malloc(sizeof(kingfisher_hash_t)));
     kingfisher_hash_t *tmp_hk1 = ce1, *tmp_hk2 = ce2; // Save the pointer location for later comparison.
     kstring_t barcode{0, 32, (char *)malloc(32uL * sizeof(char))};
-    unsigned blen1, blen2;
+    unsigned blen1, blen2, max_rlen(0);
     unsigned offset1, offset2;
     char pass;
     size_t barcode_count{0};
@@ -202,6 +202,8 @@ sprintf(mode, level > 0 ? "wb%i": "wT", level % 10);
         pass = 1;
         blen1 = get_blen(seq1->seq.s, homing, homing_len, blen, max_blen, mask);
         blen2 = get_blen(seq2->seq.s, homing, homing_len, blen, max_blen, mask);
+        if(UNLIKELY(max_rlen < seq1->seq.l)) max_rlen = seq1->seq.l;
+        if(UNLIKELY(max_rlen < seq2->seq.l)) max_rlen = seq2->seq.l;
         if(switch_test(seq1, seq2, mask)) {
             if(blen2 != (unsigned)-1) memcpy(barcode.s, seq2->seq.s + mask, blen2);
             else {
@@ -221,7 +223,7 @@ sprintf(mode, level > 0 ? "wb%i": "wT", level % 10);
                 blen1 = blen - mask;
                 memset(barcode.s + barcode.l, 'N', blen1);
             }
-            barcode.l = barcode.l + blen1;
+            barcode.l += blen1;
             barcode.s[barcode.l] = '\0';
             HASH_FIND_STR(hash1r, barcode.s, tmp_hk1);
             HASH_FIND_STR(hash2r, barcode.s, tmp_hk2);
@@ -318,10 +320,12 @@ sprintf(mode, level > 0 ? "wb%i": "wT", level % 10);
     kseq_destroy(seq2), seq2 = nullptr;
     LOG_DEBUG("Loaded all records into memory.\n");
 
-    kstring_t ks1{0, 0, nullptr};
-    kstring_t ks2{0, 0, nullptr};
+    kstring_t ks1{0, 300, (char *)malloc(300)};
+    kstring_t ks2{0, 300, (char *)malloc(300)};
+    memset(ks2.s, '*', ks2.l - 1); ks2.s[ks2.m-1] = 0;
+    memset(ks1.s, '*', ks1.l - 1); ks1.s[ks1.m-1] = 0;
     kingfisher_hash_t *t2(nullptr);
-    tmpvars_t tmp;
+    tmpvars_t tmp(max_blen << 1, max_rlen);
     HASH_ITER(hh, hash1f, ce1, tmp_hk1) {
         HASH_FIND_STR(hash1r, ce1->id, t2);
         HASH_FIND_STR(hash2f, ce1->id, ce2);
@@ -433,7 +437,7 @@ void hash_dmp_core(char *infname, char *outfname, int level)
     }
     LOG_DEBUG("Loaded all records into memory. Writing out to %s!\n", ifn_stream(outfname));
     count = 0;
-    kstring_t ks{0, 0, nullptr};
+    kstring_t ks{0, 300, (char*)malloc(300)};
     HASH_ITER(hh, hash, current_entry, tmp_hk) {
         ++count;
         dmp_process_write(current_entry->value, &ks, &tmp, -1);
@@ -551,11 +555,14 @@ void stranded_hash_dmp_core(char *infname, char *outfname, int level)
     LOG_DEBUG("Loaded all records into memory. Writing out to %s!\n", ifn_stream(outfname));
     // Write out all unmatched in forward and handle all barcodes handled from both strands.
     uint64_t duplex(0), non_duplex(0), non_duplex_fm(0);
-    kstring_t ks{0, 0, nullptr};
+    kstring_t ks{0, 300, (char *)malloc(300)};
     // Demultiplex and empty the hash.
 #if !NDEBUG
     khiter_t ki;
     int hamming_distance, khr;
+    memset(ks.s, '*', ks.m-1);
+    ks.s[ks.m-1] = 0;
+    LOG_DEBUG("New string: %s.\n", ks.s);
 #endif
     HASH_ITER(hh, hfor, cfor, tmp_hkf) {
         HASH_FIND_STR(hrev, cfor->id, crev);

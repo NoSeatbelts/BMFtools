@@ -6,7 +6,7 @@ try:
     import pysam
 except ImportError:
     sys.stderr.write("Could not import pysam. Not running tests.\n")
-    sys.exit(0)
+    sys.exit(1)
 import numpy as np
 
 def get_tags(read):
