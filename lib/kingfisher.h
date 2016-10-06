@@ -99,7 +99,7 @@ static inline void pushback_inmem(kingfisher_t *kfp, kseq_t *seq, int offset, in
     // Reuse pass instead of allocating another variable.
     for(i = offset; i < seq->seq.l; ++i) {
         pass = nuc2num(seq->seq.s[i]) + (i - offset) * 5;
-        assert(pass < (unsigned)kfp->readlen * 5);
+        assert(pass < kfp->readlen * 5);
         ++kfp->nuc_counts[pass];
         kfp->phred_sums[pass] += seq->qual.s[i] - 33;
         if(seq->qual.s[i] > kfp->max_phreds[pass])
