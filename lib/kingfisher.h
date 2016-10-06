@@ -76,9 +76,9 @@ static inline void kfill_both(int readlen, uint16_t *agrees, uint32_t *quals, ks
 {
     int i;
     kputsnl("FA:B:I", ks);
-    for(i = 0; i < readlen; ++i) ksprintf(ks, ",%u", agrees[i]);
+    for(i = 0; i < readlen; ++i) kputc(',', ks), kputw(agrees[i], ks);
     kputsnl("\tPV:B:I", ks);
-    for(i = 0; i < readlen; ++i) ksprintf(ks, ",%u", quals[i]);
+    for(i = 0; i < readlen; ++i) kputc(',', ks), kputw(quals[i], ks);
 }
 
 static inline void pb_pos(kingfisher_t *kfp, kseq_t *seq, int i) {
@@ -89,14 +89,12 @@ static inline void pb_pos(kingfisher_t *kfp, kseq_t *seq, int i) {
 }
 
 static inline void pushback_inmem(kingfisher_t *kfp, kseq_t *seq, int offset, int pass) {
-    if(!kfp->length++) {
-        kfp->pass_fail = pass + '0';
-    } else {
+    if(kfp->length++) {
         if(kfp->readlen + offset != (int64_t)seq->seq.l) {
             if(pass) return; // Don't bother, it's an error.
             offset = seq->seq.l - kfp->readlen;
         }
-    }
+    } else kfp->pass_fail = pass + '0';
     uint32_t posdata, i;
     for(i = offset; i < seq->seq.l; ++i) {
         posdata = nuc2num(seq->seq.s[i]) + (i - offset) * 5;
