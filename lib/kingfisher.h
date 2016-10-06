@@ -95,14 +95,15 @@ static inline void pushback_inmem(kingfisher_t *kfp, kseq_t *seq, int offset, in
             offset = seq->seq.l - kfp->readlen;
         }
     } else kfp->pass_fail = pass + '0';
-    uint32_t posdata, i;
+    uint32_t i;
+    // Reuse pass instead of allocating another variable.
     for(i = offset; i < seq->seq.l; ++i) {
-        posdata = nuc2num(seq->seq.s[i]) + (i - offset) * 5;
-        assert(posdata < (unsigned)kfp->readlen * 5);
-        ++kfp->nuc_counts[posdata];
-        kfp->phred_sums[posdata] += seq->qual.s[i] - 33;
-        if(seq->qual.s[i] > kfp->max_phreds[posdata])
-            kfp->max_phreds[posdata] = seq->qual.s[i];
+        pass = nuc2num(seq->seq.s[i]) + (i - offset) * 5;
+        assert(pass < (unsigned)kfp->readlen * 5);
+        ++kfp->nuc_counts[pass];
+        kfp->phred_sums[pass] += seq->qual.s[i] - 33;
+        if(seq->qual.s[i] > kfp->max_phreds[pass])
+            kfp->max_phreds[pass] = seq->qual.s[i];
     }
 }
 
@@ -113,7 +114,8 @@ static inline void pushback_kseq(kingfisher_t *kfp, kseq_t *seq, int blen)
         memcpy(kfp->barcode, seq->comment.s + HASH_DMP_OFFSET, blen);
         kfp->barcode[blen] = '\0';
     }
-    for(int i(0); i < kfp->readlen; ++i) pb_pos(kfp, seq, i);
+    // Reuse blen int to avoid allocating another integer.
+    for(blen = 0; blen < kfp->readlen; ++blen) pb_pos(kfp, seq, blen);
 }
 
 

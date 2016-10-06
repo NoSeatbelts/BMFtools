@@ -210,7 +210,6 @@ sprintf(mode, level > 0 ? "wb%i": "wT", level % 10);
                 memset(barcode.s, 'N', blen2);
             }
             barcode.l = blen2;
-            //barcode.s[barcode.l] = '\0';
             if(blen1 != (unsigned)-1) {
                 while(blen1 + blen2 >= barcode.m) {
                     kroundup32(barcode.m);
@@ -224,7 +223,6 @@ sprintf(mode, level > 0 ? "wb%i": "wT", level % 10);
             }
             barcode.l = barcode.l + blen1;
             barcode.s[barcode.l] = '\0';
-            //LOG_DEBUG("Looking for barcode %s.\n", barcode.s);
             HASH_FIND_STR(hash1r, barcode.s, tmp_hk1);
             HASH_FIND_STR(hash2r, barcode.s, tmp_hk2);
             pass &= test_hp(barcode.s, threshold);
@@ -463,7 +461,7 @@ void stranded_hash_dmp_core(char *infname, char *outfname, int level)
 #if !NDEBUG
     khash_t(hd) *hds = kh_init(hd);
 #endif
-    char mode[4] = "wT"; // Defaults to uncompressed "transparent" gzip output.
+    char mode[4]{"wT"}; // Defaults to uncompressed "transparent" gzip output.
     if(level > 0) sprintf(mode, "wb%i", level % 10);
     LOG_DEBUG("Writing stranded hash dmp information with mode: '%s'.\n", mode);
     gzFile out_handle(gzopen(outfname, mode));
@@ -483,8 +481,8 @@ void stranded_hash_dmp_core(char *infname, char *outfname, int level)
         kseq_destroy(seq);
         return;
     }
-    char *bs_ptr = barcode_mem_view(seq);
-    int blen = infer_barcode_length(bs_ptr);
+    char *bs_ptr(barcode_mem_view(seq));
+    int blen(infer_barcode_length(bs_ptr));
     LOG_DEBUG("Barcode length (inferred): %i. First barcode: %s.\n", blen, bs_ptr);
     tmpvars_t tmp(blen, seq->seq.l);
     memcpy(tmp.key, bs_ptr, blen);
@@ -513,7 +511,7 @@ void stranded_hash_dmp_core(char *infname, char *outfname, int level)
     }
 
     // Add reads to the hash
-    while(LIKELY((l = kseq_read(seq)) >= 0)) {
+    while(LIKELY((kseq_read(seq)) >= 0)) {
 #if !NDEBUG
         if(UNLIKELY(++count % 1000000 == 0))
             fprintf(stderr, "[%s::%s] Number of records processed: %" PRIu64 ".\n", __func__,
