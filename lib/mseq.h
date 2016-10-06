@@ -8,7 +8,9 @@
 #include "lib/rescaler.h"
 
 
-#define MAX_BARCODE_LENGTH 31 // Maximum expected inline barcode
+#ifndef MAX_BARCODE_LENGTH
+#define MAX_BARCODE_LENGTH 31
+#endif
 
 #ifndef KSEQ_DEC_GZ
 #define KSEQ_DEC_GZ
@@ -146,16 +148,16 @@ static inline void mseq2fq(gzFile handle, mseq_t *mvar, int pass_fail, char *bar
  */
 static inline void update_mseq(mseq_t *mvar, kseq_t *seq, char *rescaler, tmp_mseq_t *tmp, int n_len, int is_read2)
 {
-    memcpy(mvar->name, seq->name.s, seq->name.l);
-    mvar->name[seq->name.l] = '\0';
-    memcpy(mvar->seq, seq->seq.s + n_len, seq->seq.l - n_len);
-    mvar->seq[seq->seq.l - n_len] = '\0';
-    mvar->qual[seq->qual.l - n_len] = '\0';
+    memcpy(mvar->name.s, seq->name.s, seq->name.l);
+    mvar->name.s[seq->name.l] = '\0';
+    memcpy(mvar->seq.s, seq->seq.s + n_len, seq->seq.l - n_len);
+    mvar->seq.s[seq->seq.l - n_len] = '\0';
+    mvar->qual.s[seq->qual.l - n_len] = '\0';
     if(rescaler)
         for(unsigned i(n_len); i < seq->seq.l; ++i)
-            mvar->qual[i - n_len] = rescale_qscore(is_read2, seq->qual.s[i], i,
+            mvar->qual.s[i - n_len] = rescale_qscore(is_read2, seq->qual.s[i], i,
                                                    seq->seq.s[i], seq->seq.l, rescaler);
-    else memcpy(mvar->qual, seq->qual.s + n_len, seq->qual.l - n_len);
+    else memcpy(mvar->qual.s, seq->qual.s + n_len, seq->qual.l - n_len);
 }
 
 // TMP_MSEQ Utilities

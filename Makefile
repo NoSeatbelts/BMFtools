@@ -88,11 +88,11 @@ src/%.o: src/%.cpp cstr_util.o
 libhts.a:
 	+cd htslib && echo "/* Empty config.h */" >> config.h && make -j $(THREADS) && cp libhts.a ../
 bmftools_db: $(D_OBJS) libhts.a update_dlib
-	$(CXX) $(FLAGS) $(INCLUDE) $(LIB) $(LD) $(DB_FLAGS) $(D_OBJS) libhts.a $(LD) -o bmftools_db
+	$(CXX) $(FLAGS) $(INCLUDE) $(LIB) $(LD) $(DB_FLAGS) $(D_OBJS) libhts.a -o bmftools_db $(LD)
 bmftools_p: $(P_OBJS) libhts.a update_dlib
-	$(CXX) $(FLAGS) $(INCLUDE) $(LIB) $(LD) $(PG_FLAGS) $(P_OBJS) libhts.a $(LD) -o bmftools_p
+	$(CXX) $(FLAGS) $(INCLUDE) $(LIB) $(LD) $(PG_FLAGS) $(P_OBJS) libhts.a -o bmftools_p $(LD)
 bmftools: $(OBJS) libhts.a update_dlib
-	$(CXX) $(FLAGS) $(INCLUDE) $(LIB) $(LD) $(OPT_FLAGS) $(OBJS) libhts.a $(LD) -o bmftools
+	$(CXX) $(FLAGS) $(INCLUDE) $(LIB) $(LD) $(OPT_FLAGS) $(OBJS) libhts.a -o bmftools $(LD)
 
 test/ucs/ucs_test: libhts.a $(TEST_OBJS)
 	$(CXX) $(FLAGS) $(INCLUDE) $(LIB) $(LD) $(DB_FLAGS) test/ucs/ucs_test.dbo libhts.a -o test/ucs/ucs_test

@@ -10,6 +10,9 @@
 #include "include/igamc_cephes.h"
 #include "lib/splitter.h"
 
+#ifndef MAX_BARCODE_LENGTH
+#define MAX_BARCODE_LENGTH 31
+#endif
 #ifndef MAX_PV
 #    define MAX_PV 3117 // Maximum seen with doubles
 #endif
@@ -26,7 +29,6 @@ const double MIN_FRAC_AGREED = 0.5; // Minimum fraction of bases agreed in a fam
 
 
 struct tmpvars_t {
-    char *bs_ptr;
     int blen;
     int readlen;
     char key[MAX_BARCODE_LENGTH + 1];
@@ -38,7 +40,8 @@ struct tmpvars_t {
         uint32_t cons_quals[SEQBUF_SIZE];
         uint16_t agrees[SEQBUF_SIZE];
     } buffers;
-    tmpvars_t(char *bs_ptr, int blen_, int readlen_): bs_ptr(bs_ptr), blen(blen_), readlen(readlen_) {
+    tmpvars_t() {memset(this, 0, sizeof *this);}
+    tmpvars_t(int blen_, int readlen_): blen(blen_), readlen(readlen_) {
         buffers.name_buffer[0] = '@';
         buffers.name_buffer[blen] = '\0';
         buffers.cons_seq_buffer[readlen] = '\0';
@@ -50,11 +53,19 @@ struct kingfisher_t {
     uint16_t *nuc_counts; // Count of nucleotides of this form
     uint32_t *phred_sums; // Sums of -10log10(p-value)
     char *max_phreds; // Maximum phred score observed at position. Use this as the final sequence for the quality to maintain compatibility with GATK and other tools.
-    int length; // Number of reads in family
-    int readlen; // Length of reads
     char barcode[MAX_BARCODE_LENGTH + 1];
-    char pass_fail;
+    int length:16; // Number of reads in family
+    int readlen:12; // Length of reads
+    int pass_fail:8;
 };
+
+static inline void destroy_kf(kingfisher_t *kfp)
+{
+    free(kfp->nuc_counts);
+    free(kfp->phred_sums);
+    free(kfp->max_phreds);
+    free(kfp);
+}
 
 
 void zstranded_process_write(kingfisher_t *kfpf, kingfisher_t *kfpr, kstring_t *ks, tmpvars_t *bufs);

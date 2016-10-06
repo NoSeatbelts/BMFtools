@@ -1,4 +1,5 @@
 #include "mseq.h"
+#include "htslib/kstring.h"
 
 #include "dlib/misc_util.h"
 
@@ -31,15 +32,15 @@ mseq_t *mseq_init(kseq_t *seq, char *rescaler, int is_read2)
         exit(EXIT_FAILURE);
     }
     mseq_t *ret((mseq_t *)calloc(1, sizeof(mseq_t)));
-    kputsn(&ret->name, seq->name.l, seq->name.s);
-    kputsn(&ret->comment, seq->comment.l, seq->comment.s);
-    kputsn(&ret->seq, seq->seq.l, seq->seq.s);
-    kputsn(&ret->qual, seq->qual.l, seq->qual.s);
+    kputsn(seq->name.s, seq->name.l, &ret->name);
+    kputsn(seq->comment.s, seq->comment.l, &ret->comment);
+    kputsn(seq->seq.s, seq->seq.l, &ret->seq);
+    kputsn(seq->qual.s, seq->qual.l, &ret->qual);
 
     ret->l = seq->seq.l;
     if(rescaler)
         for(int i(0); i < ret->l; i++)
-            ret->qual.s[i] = rescale_qscore(is_read2 , seq->qual.s[i], i, ret->seq[i], seq->seq.l, rescaler);
+            ret->qual.s[i] = rescale_qscore(is_read2 , seq->qual.s[i], i, ret->seq.s[i], seq->seq.l, rescaler);
     return ret;
 }
 

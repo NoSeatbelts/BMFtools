@@ -47,13 +47,6 @@ void inmem_usage()
             );
 }
 
-tmpvars_t *init_tmpvars_p(char *bs_ptr, int blen, int readlen)
-{
-    tmpvars_t *ret((tmpvars_t *)calloc(1, sizeof(tmpvars_t)));
-    return ret;
-}
-
-
 
 int hashcollapse_main(int argc, char *argv[])
 {
@@ -330,6 +323,7 @@ sprintf(mode, level > 0 ? "wb%i": "wT", level % 10);
     kstring_t ks1{0, 0, nullptr};
     kstring_t ks2{0, 0, nullptr};
     kingfisher_hash_t *t2(nullptr);
+    tmpvars_t tmp;
     HASH_ITER(hh, hash1f, ce1, tmp_hk1) {
         HASH_FIND_STR(hash1r, ce1->id, t2);
         HASH_FIND_STR(hash2f, ce1->id, ce2);
@@ -410,15 +404,15 @@ void hash_dmp_core(char *infname, char *outfname, int level)
     char *bs_ptr(barcode_mem_view(seq));
     const int blen(infer_barcode_length(bs_ptr));
     LOG_DEBUG("Barcode length (inferred): %i.\n", blen);
-    tmpvars_t *tmp(init_tmpvars_p(bs_ptr, blen, seq->seq.l));
-    memcpy(tmp->key, bs_ptr, blen);
-    tmp->key[blen] = '\0';
+    tmpvars_t tmp(blen, seq->seq.l);
+    memcpy(tmp.key, bs_ptr, blen);
+    tmp.key[blen] = '\0';
     // Start hash table
     kingfisher_hash_t *hash(nullptr);
     kingfisher_hash_t *current_entry((kingfisher_hash_t *)malloc(sizeof(kingfisher_hash_t)));
     kingfisher_hash_t *tmp_hk(current_entry); // Save the pointer location for later comparison.
     cp_view2buf(bs_ptr + 1, current_entry->id);
-    current_entry->value = init_kfp(tmp->readlen);
+    current_entry->value = init_kfp(tmp.readlen);
     HASH_ADD_STR(hash, id, current_entry);
     pushback_kseq(current_entry->value, seq, blen);
 
@@ -428,12 +422,12 @@ void hash_dmp_core(char *infname, char *outfname, int level)
         if(UNLIKELY(++count % 1000000 == 0))
             fprintf(stderr, "[%s::%s] Number of records read: %" PRIu64 ".\n", __func__,
                     strcmp("-", infname) == 0 ? "stdin": infname,count);
-        cp_view2buf(seq->comment.s + HASH_DMP_OFFSET + 1, tmp->key);
-        HASH_FIND_STR(hash, tmp->key, tmp_hk);
+        cp_view2buf(seq->comment.s + HASH_DMP_OFFSET + 1, tmp.key);
+        HASH_FIND_STR(hash, tmp.key, tmp_hk);
         if(tmp_hk) pushback_kseq(tmp_hk->value, seq, blen);
         else {
             tmp_hk = (kingfisher_hash_t *)malloc(sizeof(kingfisher_hash_t));
-            tmp_hk->value = init_kfp(tmp->readlen);
+            tmp_hk->value = init_kfp(tmp.readlen);
             cp_view2buf(seq->comment.s + HASH_DMP_OFFSET + 1, tmp_hk->id);
             pushback_kseq(tmp_hk->value, seq, blen);
             HASH_ADD_STR(hash, id, tmp_hk);
@@ -444,7 +438,7 @@ void hash_dmp_core(char *infname, char *outfname, int level)
     kstring_t ks{0, 0, nullptr};
     HASH_ITER(hh, hash, current_entry, tmp_hk) {
         ++count;
-        dmp_process_write(current_entry->value, &ks, tmp->buffers, -1);
+        dmp_process_write(current_entry->value, &ks, &tmp, -1);
         gzputs(out_handle, (const char *)ks.s);
         ks.l = 0;
         destroy_kf(current_entry->value);
@@ -459,7 +453,6 @@ void hash_dmp_core(char *infname, char *outfname, int level)
     gzclose(fp);
     gzclose(out_handle);
     kseq_destroy(seq);
-    tmpvars_destroy(tmp);
 }
 #if !NDEBUG
 KHASH_MAP_INIT_INT(hd, uint64_t)
@@ -493,9 +486,9 @@ void stranded_hash_dmp_core(char *infname, char *outfname, int level)
     char *bs_ptr = barcode_mem_view(seq);
     int blen = infer_barcode_length(bs_ptr);
     LOG_DEBUG("Barcode length (inferred): %i. First barcode: %s.\n", blen, bs_ptr);
-    tmpvars_t *tmp = init_tmpvars_p(bs_ptr, blen, seq->seq.l);
-    memcpy(tmp->key, bs_ptr, blen);
-    tmp->key[blen] = '\0';
+    tmpvars_t tmp(blen, seq->seq.l);
+    memcpy(tmp.key, bs_ptr, blen);
+    tmp.key[blen] = '\0';
     // Start hash table
     kingfisher_hash_t *hfor(nullptr), *hrev(nullptr); // Hash forward, hash reverse
     kingfisher_hash_t *crev((kingfisher_hash_t *)malloc(sizeof(kingfisher_hash_t))); // Current reverse, current forward
@@ -509,12 +502,12 @@ void stranded_hash_dmp_core(char *infname, char *outfname, int level)
     if(*bs_ptr == 'F') {
         ++fcount;
         cp_view2buf(bs_ptr + 1, cfor->id);
-        cfor->value = init_kfp(tmp->readlen);
+        cfor->value = init_kfp(tmp.readlen);
         HASH_ADD_STR(hfor, id, cfor);
         pushback_kseq(cfor->value, seq, blen);
     } else {
         cp_view2buf(bs_ptr + 1, crev->id);
-        crev->value = init_kfp(tmp->readlen);
+        crev->value = init_kfp(tmp.readlen);
         HASH_ADD_STR(hrev, id, crev);
         pushback_kseq(hrev->value, seq, blen);
     }
@@ -530,23 +523,23 @@ void stranded_hash_dmp_core(char *infname, char *outfname, int level)
 #endif
         if(seq->comment.s[HASH_DMP_OFFSET] == 'F') {
             ++fcount;
-            cp_view2buf(seq->comment.s + HASH_DMP_OFFSET + 1, tmp->key);
-            HASH_FIND_STR(hfor, tmp->key, tmp_hkf);
+            cp_view2buf(seq->comment.s + HASH_DMP_OFFSET + 1, tmp.key);
+            HASH_FIND_STR(hfor, tmp.key, tmp_hkf);
             if(tmp_hkf) pushback_kseq(tmp_hkf->value, seq, blen);
             else {
                 tmp_hkf = (kingfisher_hash_t *)malloc(sizeof(kingfisher_hash_t));
-                tmp_hkf->value = init_kfp(tmp->readlen);
+                tmp_hkf->value = init_kfp(tmp.readlen);
                 cp_view2buf(seq->comment.s + HASH_DMP_OFFSET + 1, tmp_hkf->id);
                 pushback_kseq(tmp_hkf->value, seq, blen);
                 HASH_ADD_STR(hfor, id, tmp_hkf);
             }
         } else {
-            cp_view2buf(seq->comment.s + HASH_DMP_OFFSET + 1, tmp->key);
-            HASH_FIND_STR(hrev, tmp->key, tmp_hkr);
+            cp_view2buf(seq->comment.s + HASH_DMP_OFFSET + 1, tmp.key);
+            HASH_FIND_STR(hrev, tmp.key, tmp_hkr);
             if(tmp_hkr) pushback_kseq(tmp_hkr->value, seq, blen);
             else {
                 tmp_hkr = (kingfisher_hash_t *)malloc(sizeof(kingfisher_hash_t));
-                tmp_hkr->value = init_kfp(tmp->readlen);
+                tmp_hkr->value = init_kfp(tmp.readlen);
                 cp_view2buf(seq->comment.s + HASH_DMP_OFFSET + 1, tmp_hkr->id);
                 pushback_kseq(tmp_hkr->value, seq, blen);
                 HASH_ADD_STR(hrev, id, tmp_hkr);
@@ -577,7 +570,7 @@ void stranded_hash_dmp_core(char *infname, char *outfname, int level)
             } else ++kh_val(hds, ki);
 #endif
             ++duplex;
-            zstranded_process_write(cfor->value, crev->value, &ks, tmp->buffers); // Found from both strands!
+            zstranded_process_write(cfor->value, crev->value, &ks, &tmp); // Found from both strands!
             destroy_kf(cfor->value); destroy_kf(crev->value);
             HASH_DEL(hrev, crev); HASH_DEL(hfor, cfor);
             if(crev) free(crev), crev = nullptr;
@@ -586,7 +579,7 @@ void stranded_hash_dmp_core(char *infname, char *outfname, int level)
         } else {
             ++non_duplex;
             if(cfor->value->length > 1) ++non_duplex_fm;
-            dmp_process_write(cfor->value, &ks, tmp->buffers, 0); // No reverse strand found. \='{
+            dmp_process_write(cfor->value, &ks, &tmp, 0); // No reverse strand found. \='{
             destroy_kf(cfor->value);
             gzputs(out_handle, (const char *)ks.s);
             ks.l = 0;
@@ -605,7 +598,7 @@ void stranded_hash_dmp_core(char *infname, char *outfname, int level)
     HASH_ITER(hh, hrev, crev, tmp_hkr) {
         ++non_duplex;
         if(crev->value->length > 1) ++non_duplex_fm;
-        dmp_process_write(crev->value, &ks, tmp->buffers, 1); // Only reverse strand found. \='{
+        dmp_process_write(crev->value, &ks, &tmp, 1); // Only reverse strand found. \='{
         destroy_kf(crev->value);
         gzputs(out_handle, (const char *)ks.s);
         ks.l = 0;
@@ -619,7 +612,6 @@ void stranded_hash_dmp_core(char *infname, char *outfname, int level)
     free(ks.s);
     gzclose(fp); gzclose(out_handle);
     kseq_destroy(seq);
-    tmpvars_destroy(tmp);
 }
 
 } /* namespace bmf */

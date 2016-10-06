@@ -60,21 +60,6 @@ static inline kingfisher_t *init_kfp(size_t readlen)
     return ret;
 }
 
-static inline void destroy_kf(kingfisher_t *kfp)
-{
-    free(kfp->nuc_counts);
-    free(kfp->phred_sums);
-    free(kfp->max_phreds);
-    free(kfp);
-}
-
-
-static inline void tmpvars_destroy(tmpvars_t *tmp)
-{
-    free(tmp->buffers), free(tmp);
-}
-
-
 /* @func
  * Copies the barcode sequence from a fastq comment field into a buffer
  * :param: seq - [arg/kseq_t *] a filled-in kseq object.
