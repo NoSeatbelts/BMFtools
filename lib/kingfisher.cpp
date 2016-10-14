@@ -123,7 +123,7 @@ void zstranded_process_write(kingfisher_t *kfpf, kingfisher_t *kfpr, kstring_t *
             tmp->buffers.cons_seq_buffer[i] = num2nuc(fwidx);
             kfpf->max_phreds[offset + fwidx] = std::max(kfpr->max_phreds[offset + rvidx], kfpf->max_phreds[offset + rvidx]);
             LOG_DEBUG("match buffer value is now %c.\n", tmp->buffers.cons_seq_buffer[i]);
-            diffs -= tmp->buffers.agrees[i]; // Don't count bases from masked read at position for diffs.
+            diffs -= tmp->buffers.agrees[i] + kfpf->nuc_counts[offset + 4] + kfpr->nuc_counts[offset + 4]; // Don't count masked bases.
         } else if(fwidx == 4) {
             pval = igamc_pvalues(kfpr->length, LOG10_TO_CHI2(kfpr->phred_sums[offset + rvidx]));
             LOG_DEBUG("fwn. Confidence before subtracting: %u.\n", pvalue_to_phred(pval));

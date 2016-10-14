@@ -35,7 +35,7 @@ def main():
         tags = get_tags(r1)
         assert tags["FM"] == 7
         try:
-            assert round(tags["NF"], 2) == 0.43
+            assert round(tags["NF"], 2) == 0.14
         except AssertionError:
             sys.stderr.write("Tag for NF: '%f'\n" % tags["NF"])
             raise
