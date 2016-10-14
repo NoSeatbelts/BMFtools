@@ -295,6 +295,7 @@ mark_splitter_t pp_split_inline_se(marksplit_settings_t *settings)
     update_mseq(rseq, seq, settings->rescaler, tmp, n_len, 0);
     bin = get_binner_type(rseq->barcode, settings->n_nucs, uint64_t);
     assert(bin < (uint64_t)settings->n_handles);
+    LOG_DEBUG("rseq pointer: %p. rseq bbarcode: %s. rseq name: %s\n", rseq, rseq->barcode, rseq->name);
     mseq2fq_stranded(splitter.tmp_out_handles_r1[bin], rseq, pass_fail, rseq->barcode, 'F');
     while(LIKELY(kseq_read(seq) >= 0)) {
         if(UNLIKELY(++count % settings->notification_interval == 0))
@@ -411,7 +412,6 @@ mark_splitter_t pp_split_inline(marksplit_settings_t *settings)
         }
     }
     LOG_INFO("Collapsing %lu initial read pairs....\n", count);
-    LOG_DEBUG("Cleaning up.\n");
     for(int i(0); i < splitter.n_handles; ++i) {
         gzclose(splitter.tmp_out_handles_r1[i]);
         gzclose(splitter.tmp_out_handles_r2[i]);

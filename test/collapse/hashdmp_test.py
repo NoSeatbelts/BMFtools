@@ -6,7 +6,7 @@ try:
     import pysam
 except ImportError:
     sys.stderr.write("Could not import pysam. Not running tests.\n")
-    sys.exit(0)
+    sys.exit(1)
 import numpy as np
 
 def get_tags(read):
@@ -34,7 +34,11 @@ def main():
             r1 = next(fqh)  # Python 3
         tags = get_tags(r1)
         assert tags["FM"] == 7
-        assert round(tags["NF"], 2) == 0.14
+        try:
+            assert round(tags["NF"], 2) == 0.14
+        except AssertionError:
+            sys.stderr.write("Tag for NF: '%f'\n" % tags["NF"])
+            raise
         assert tags["RV"] == 2
         assert tags["DR"]
         assert len(r1.name) == 16
@@ -46,9 +50,6 @@ def main():
         assert tags["FM"] == 1
         assert tags["FP"] == 0
         assert tags["DR"] == 0
-
-
-    return 
 
 if __name__ == "__main__":
     sys.exit(main())
