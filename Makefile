@@ -53,8 +53,7 @@ UTILS=bam_count fqc
 
 .PHONY: all clean install tests python mostlyclean hashdmp_test err_test update_dlib util
 
-all: libhts.a tests $(BINS $(UTILS)
-
+all: libhts.a $(BINS) $(UTILS)
 
 util: $(UTILS)
 
@@ -94,6 +93,9 @@ bmftools_p: $(P_OBJS) libhts.a update_dlib
 bmftools: $(OBJS) libhts.a update_dlib
 	$(CXX) $(FLAGS) $(INCLUDE) $(LIB) $(LD) $(OPT_FLAGS) $(OBJS) libhts.a -o bmftools $(LD)
 
+bam_count: $(OBJS) util/bam_count.o
+	 $(CXX) $(FLAGS) $(INCLUDE) $(LIB) $(LD) $(OPT_FLAGS) util/bam_count.o libhts.a -o $@
+
 test/ucs/ucs_test: libhts.a $(TEST_OBJS)
 	$(CXX) $(FLAGS) $(INCLUDE) $(LIB) $(LD) $(DB_FLAGS) test/ucs/ucs_test.dbo libhts.a -o test/ucs/ucs_test
 	cd test/ucs && ./ucs_test && cd ./..
@@ -129,4 +131,5 @@ update_dlib:
 
 mostlyclean:
 	rm -f *.*o && rm -f bmftools* && rm -f src/*.*o && rm -f dlib/*.*o && \
-	rm -f include/*.*o && rm -f lib/*.*o && rm -f $(find ./test -name '*o')
+	rm -f include/*.*o && rm -f lib/*.*o && rm -f $(find ./test -name '*o') \
+	rm -f $(UTILS)
