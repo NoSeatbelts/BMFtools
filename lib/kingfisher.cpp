@@ -18,8 +18,14 @@ void dmp_process_write(kingfisher_t *kfp, kstring_t *ks, tmpvars_t *tmp, const i
             if(kfp->phred_sums[offset + j] > cmin) cmin = kfp->phred_sums[offset + j], maxindex = j;
             pvalues[j] = igamc_pvalues(kfp->length, LOG10_TO_CHI2(kfp->phred_sums[offset + j]));
         }
-        tmp->buffers.cons_quals[i] = pvalue_to_phred(pvalues[maxindex]);
+#if !NDEBUG
+        //if(kfp->length > 1) fprintf(stderr, "P value before correction: %lf.\n", pvalues[maxindex]);
+#endif
         for(j = 0; j < 5; ++j) if(j != maxindex) pvalues[maxindex] /= pvalues[j];
+        tmp->buffers.cons_quals[i] = pvalue_to_phred(pvalues[maxindex]);
+#if !NDEBUG
+        //if(kfp->length > 1) fprintf(stderr, "P value after correction: %lf, (phred: %u).\n", pvalues[maxindex], tmp->buffers.cons_quals[i]);
+#endif
         tmp->buffers.agrees[i] = kfp->nuc_counts[maxindex + offset];
         diffs -= maxindex == 4 ? kfp->readlen: tmp->buffers.agrees[i];
         if(tmp->buffers.cons_quals[i] < 3 || (double)tmp->buffers.agrees[i] / kfp->length < MIN_FRAC_AGREED)
@@ -94,52 +100,57 @@ void zstranded_process_write(kingfisher_t *kfpf, kingfisher_t *kfpr, kstring_t *
     int diffs(FM * kfpf->readlen), i, j, fwidx, rvidx, offset;
     double fwmax, rvmax;
     if(ks->l < kfpf->readlen) ks_resize(ks, kfpf->readlen);
-    double pvalues[5]{0};
+    double pval;
     if(ks->l < kfpr->readlen) ks_resize(ks, kfpr->readlen);
     LOG_DEBUG("ks %p, %s. Starting diffs: %i.\n", ks, ks->s, diffs);
     for(i = 0; i < kfpf->readlen; ++i) {
         offset = (i << 2) + i;
         fwidx = rvidx = 4; // Defaulting to N if no observations elsewhere found.
         fwmax = rvmax = 0.;
-        for(j = 0; j < 4; ++j) {
+        for(j = 0; j < 5; ++j) {
             assert(offset + j < kfpf->readlen * 5);
             if(kfpf->phred_sums[offset + j] > fwmax) fwmax = kfpf->phred_sums[offset + j], fwidx = j;
             if(kfpr->phred_sums[offset + j] > rvmax) rvmax = kfpr->phred_sums[offset + j], rvidx = j;
         }
-        LOG_DEBUG("before agrees: %i diffs: %i.\n", tmp->buffers.agrees[i], diffs);
+        //LOG_DEBUG("before agrees: %i diffs: %i.\n", tmp->buffers.agrees[i], diffs);
         if(fwidx == rvidx) {
-            LOG_DEBUG("match.\n");
-            pvalues[j] = igamc_pvalues(kfpr->length + kfpf->length, LOG10_TO_CHI2(kfpf->phred_sums[offset + fwidx] + kfpr->phred_sums[offset + rvidx]));
-            for(j = 0; j < 4; ++j) if(j != fwidx) pvalues[j] /= igamc_pvalues(kfpr->length + kfpf->length, kfpf->phred_sums[offset + j] + kfpr->phred_sums[offset + j]);
-            tmp->buffers.cons_quals[i] = pvalue_to_phred(pvalues[j]);
+            pval = igamc_pvalues(FM, LOG10_TO_CHI2(kfpf->phred_sums[offset + fwidx] + kfpr->phred_sums[offset + rvidx]));
+            LOG_DEBUG("match. Confidence before subtracting: %u.\n", pvalue_to_phred(pval));
+            for(j = 0; j < 4; ++j) if(j != fwidx) pval /= igamc_pvalues(FM, LOG10_TO_CHI2(kfpf->phred_sums[offset + j] + kfpr->phred_sums[offset + j]));
+            LOG_DEBUG("match. Confidence after substracting: %u.\n", pvalue_to_phred(pval));
+            tmp->buffers.cons_quals[i] = pvalue_to_phred(pval);
             tmp->buffers.agrees[i] = kfpf->nuc_counts[offset + fwidx] + kfpr->nuc_counts[offset + fwidx];
-            tmp->buffers.cons_seq_buffer[i] = kfpf->max_phreds[offset + rvidx] < kfpr->max_phreds[offset + rvidx] ? kfpr->max_phreds[offset + rvidx]: kfpf->max_phreds[offset + rvidx];
+            tmp->buffers.cons_seq_buffer[i] = num2nuc(fwidx);
+            kfpf->max_phreds[offset + fwidx] = std::max(kfpr->max_phreds[offset + rvidx], kfpf->max_phreds[offset + rvidx]);
+            LOG_DEBUG("match buffer value is now %c.\n", tmp->buffers.cons_seq_buffer[i]);
             diffs -= tmp->buffers.agrees[i]; // Don't count bases from masked read at position for diffs.
         } else if(fwidx == 4) {
-            LOG_DEBUG("fwn.\n", i);
-            pvalues[j] = igamc_pvalues(kfpr->length, LOG10_TO_CHI2(kfpr->phred_sums[offset + rvidx]));
-            for(j = 0; j < 4; ++j) if(j != rvidx) pvalues[j] /= igamc_pvalues(kfpr->length, kfpr->phred_sums[offset + j]);
-            tmp->buffers.cons_quals[i] = pvalue_to_phred(pvalues[j]);
+            pval = igamc_pvalues(kfpr->length, LOG10_TO_CHI2(kfpr->phred_sums[offset + rvidx]));
+            LOG_DEBUG("fwn. Confidence before subtracting: %u.\n", pvalue_to_phred(pval));
+            for(j = 0; j < 4; ++j) if(j != rvidx) pval /= igamc_pvalues(kfpr->length, LOG10_TO_CHI2(kfpr->phred_sums[offset + j]));
+            LOG_DEBUG("fwn. Confidence after subtracting: %u.\n", pvalue_to_phred(pval));
+            tmp->buffers.cons_quals[i] = pvalue_to_phred(pval);
             tmp->buffers.agrees[i] = kfpr->nuc_counts[offset + rvidx] + kfpf->nuc_counts[offset + rvidx];
             diffs -= tmp->buffers.agrees[i] + kfpf->nuc_counts[offset + 4]; // Don't count bases from masked read at position for diffs.
-            tmp->buffers.cons_seq_buffer[i] = kfpr->max_phreds[offset + rvidx];
+            tmp->buffers.cons_seq_buffer[i] = num2nuc(rvidx);
+            kfpf->max_phreds[offset + fwidx] = kfpr->max_phreds[offset + rvidx];
         } else if(rvidx == 4) {
-            LOG_DEBUG("rvn.\n", i);
-            pvalues[j] = igamc_pvalues(kfpf->length, LOG10_TO_CHI2(kfpf->phred_sums[offset + fwidx]));
-            for(j = 0; j < 4; ++j) if(j != fwidx) pvalues[j] /= igamc_pvalues(kfpf->length, kfpf->phred_sums[offset + j]);
-            tmp->buffers.cons_quals[i] = pvalue_to_phred(pvalues[j]);
+            pval = igamc_pvalues(kfpf->length, LOG10_TO_CHI2(kfpf->phred_sums[offset + fwidx]));
+            LOG_DEBUG("rvn. Confidence before subtracting: %u.\n", pvalue_to_phred(pval));
+            for(j = 0; j < 4; ++j) if(j != fwidx) pval /= igamc_pvalues(kfpf->length, LOG10_TO_CHI2(kfpf->phred_sums[offset + j]));
+            LOG_DEBUG("rvn. Confidence before subtracting: %u.\n", pvalue_to_phred(pval));
+            tmp->buffers.cons_quals[i] = pvalue_to_phred(pval);
             tmp->buffers.agrees[i] = kfpf->nuc_counts[offset + fwidx] + kfpr->nuc_counts[offset + fwidx];
             diffs -= tmp->buffers.agrees[i] + kfpr->nuc_counts[offset + 4]; // Don't count bases from masked read at position for diffs.
-            tmp->buffers.cons_seq_buffer[i] = kfpf->max_phreds[offset + fwidx];
+            tmp->buffers.cons_seq_buffer[i] = num2nuc(fwidx);
         } else {
             LOG_DEBUG("alln.\n", i);
-            pvalues[j] = 2;
-            tmp->buffers.cons_quals[i] = pvalue_to_phred(pvalues[j]);
-            tmp->buffers.agrees[i] = 0;
-            diffs -= FM; // Don't count bases from masked read at position for diffs.
+            tmp->buffers.cons_quals[i] = tmp->buffers.agrees[i] = 0;
             tmp->buffers.cons_seq_buffer[i] = 'N';
+            kfpf->max_phreds[offset + 4] = '#';
+            diffs -= FM; // Don't count bases from masked read at position for diffs.
         }
-        LOG_DEBUG("after agrees: %i diffs: %i.\n", tmp->buffers.agrees[i], diffs);
+        //LOG_DEBUG("after agrees: %i diffs: %i.\n", tmp->buffers.agrees[i], diffs);
     }
     ksprintf(ks, "@%s ", kfpf->barcode + 1);
     // Add read name
@@ -151,7 +162,7 @@ void zstranded_process_write(kingfisher_t *kfpf, kingfisher_t *kfpr, kstring_t *
              tmp->buffers.cons_seq_buffer);
     LOG_DEBUG("Add max phreds\n");
     for(i = 0; i < kfpf->readlen; ++i)
-        kputc(kfpf->max_phreds[nuc2num(tmp->buffers.cons_seq_buffer[i]) + 5 * i], ks);
+        kputc(kfpf->max_phreds[nuc2num(tmp->buffers.cons_seq_buffer[i]) + (i << 2) + i], ks);
     kputc('\n', ks);
     //const int ND = get_num_differ
     return;
