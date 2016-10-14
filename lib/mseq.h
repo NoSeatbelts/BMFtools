@@ -3,6 +3,7 @@
 #include <zlib.h>
 #include <cstdint>
 #include "htslib/kseq.h"
+#include "htslib/kstring.h"
 #include "dlib/compiler_util.h"
 #include "dlib/cstr_util.h"
 #include "lib/rescaler.h"
@@ -126,14 +127,16 @@ mseq_t *mseq_init(kseq_t *seq, char *rescaler, int is_read2);
 mseq_t *mseq_rescale_init(kseq_t *seq, char *rescaler, tmp_mseq_t *tmp, int is_read2);
 static inline void mseq2fq_stranded(gzFile handle, mseq_t *mvar, int pass_fail, char *barcode, char prefix)
 {
+    assert(mvar);
+    assert(barcode);
     gzprintf(handle, "@%s ~#!#~|FP=%c|BS=%c%s\n%s\n+\n%s\n",
-             mvar->name, pass_fail + '0', prefix, barcode, mvar->seq, mvar->qual);
+             mvar->name.s, pass_fail + '0', prefix, barcode, mvar->seq.s, mvar->qual.s);
 }
 
 static inline void mseq2fq(gzFile handle, mseq_t *mvar, int pass_fail, char *barcode)
 {
     gzprintf(handle, "@%s ~#!#~|FP=%c|BS=Z%s\n%s\n+\n%s\n",
-             mvar->name, pass_fail + '0', barcode, mvar->seq, mvar->qual);
+             mvar->name.s, pass_fail + '0', barcode, mvar->seq.s, mvar->qual.s);
 }
 
 
@@ -148,15 +151,17 @@ static inline void mseq2fq(gzFile handle, mseq_t *mvar, int pass_fail, char *bar
  */
 static inline void update_mseq(mseq_t *mvar, kseq_t *seq, char *rescaler, tmp_mseq_t *tmp, int n_len, int is_read2)
 {
-    memcpy(mvar->name.s, seq->name.s, seq->name.l);
-    mvar->name.s[seq->name.l] = '\0';
-    memcpy(mvar->seq.s, seq->seq.s + n_len, seq->seq.l - n_len);
-    mvar->seq.s[seq->seq.l - n_len] = '\0';
-    mvar->qual.s[seq->qual.l - n_len] = '\0';
+    mvar->qual.l = mvar->name.l = mvar->seq.l = 0;
+    kputsn(seq->name.s, seq->name.l, &mvar->name);
+    kputsn(seq->seq.s + n_len, seq->seq.l - n_len, &mvar->seq);
+    kputsn(seq->qual.s + n_len, seq->qual.l - n_len, &mvar->qual);
+    assert(mvar->qual.l == strlen(mvar->qual.s));
+    assert(mvar->seq.l == strlen(mvar->seq.s));
+    assert(mvar->name.l == strlen(mvar->name.s));
     if(rescaler)
         for(unsigned i(n_len); i < seq->seq.l; ++i)
             mvar->qual.s[i - n_len] = rescale_qscore(is_read2, seq->qual.s[i], i,
-                                                   seq->seq.s[i], seq->seq.l, rescaler);
+                                                     seq->seq.s[i], seq->seq.l, rescaler);
     else memcpy(mvar->qual.s, seq->qual.s + n_len, seq->qual.l - n_len);
 }
 
