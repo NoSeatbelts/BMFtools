@@ -589,9 +589,8 @@ int idmp_main(int argc, char *argv[])
     ksprintf(&ffq_r1, "%s.R1.fq", settings.ffq_prefix);
     ksprintf(&ffq_r2, "%s.R2.fq", settings.ffq_prefix);
     // Cat temporary files together.
-    if(settings.to_stdout)
-        call_stdout(&settings, params, ffq_r1.s, ffq_r2.s);
-    else cat_fastqs(&settings, params, ffq_r1.s, ffq_r2.s);
+    settings.to_stdout ? call_stdout(&settings, params, ffq_r1.s, ffq_r2.s)
+                       : cat_fastqs(&settings, params, ffq_r1.s, ffq_r2.s);
     free(ffq_r1.s), free(ffq_r2.s);
     cleanup_hashdmp(&settings, params);
     splitterhash_destroy(params);
@@ -639,7 +638,6 @@ static mark_splitter_t splitmark_core_rescale(marksplit_settings_t *settings)
     for(auto path: {settings->input_r1_path, settings->input_r2_path, settings->index_fq_path})
         if(!dlib::isfile(path))
             LOG_EXIT("%s is not a file. Abort!\n", path);
-    // Open fastqs
     LOG_DEBUG("Splitter now opening files R1 ('%s'), R2 ('%s'), index ('%s').\n",
               settings->input_r1_path, settings->input_r2_path, settings->index_fq_path);
     fp_read1 = gzopen(settings->input_r1_path, "r"), fp_read2 = gzopen(settings->input_r2_path, "r");
@@ -856,9 +854,8 @@ int sdmp_main(int argc, char *argv[])
     char ffq_r1[200], ffq_r2[200];
     sprintf(ffq_r1, settings.gzip_output ? "%s.R1.fq": "%s.R1.fq.gz", settings.ffq_prefix);
     sprintf(ffq_r2, settings.gzip_output ? "%s.R2.fq": "%s.R2.fq.gz", settings.ffq_prefix);
-    if(settings.to_stdout)
-        call_stdout(&settings, params, ffq_r1, ffq_r2);
-    else cat_fastqs(&settings, params, ffq_r1, ffq_r2);
+    settings.to_stdout ? call_stdout(&settings, params, ffq_r1, ffq_r2)
+                       : cat_fastqs(&settings, params, ffq_r1, ffq_r2);
     cleanup_hashdmp(&settings, params);
     splitterhash_destroy(params);
 
