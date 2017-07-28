@@ -31,7 +31,7 @@ struct fullerr_t {
     readerr_t *r1;
     readerr_t *r2;
     size_t l;
-    char *refcontig;
+    const char *refcontig;
     khash_t(bed) *bed; // parsed-in bed file hashmap. See dlib/bed_util.[ch] (http://github.com/NoSeatbelts/dlib).
     int minFM;
     int maxFM;
@@ -386,26 +386,26 @@ void readerr_destroy(readerr_t *e)
 {
     for(int i(0); i < 4; ++i) {
         for(unsigned j(0); j < NQSCORES; ++j) {
-            cond_free(e->obs[i][j]);
-            cond_free(e->err[i][j]);
-            cond_free(e->final[i][j]);
+            free(e->obs[i][j]);
+            free(e->err[i][j]);
+            free(e->final[i][j]);
         }
-        cond_free(e->obs[i]);
-        cond_free(e->err[i]);
-        cond_free(e->qobs[i]);
-        cond_free(e->qerr[i]);
-        cond_free(e->final[i]);
-        cond_free(e->qpvsum[i]);
-        cond_free(e->qdiffs[i]);
+        free(e->obs[i]);
+        free(e->err[i]);
+        free(e->qobs[i]);
+        free(e->qerr[i]);
+        free(e->final[i]);
+        free(e->qpvsum[i]);
+        free(e->qdiffs[i]);
     }
-    cond_free(e->obs);
-    cond_free(e->err);
-    cond_free(e->qerr);
-    cond_free(e->qobs);
-    cond_free(e->final);
-    cond_free(e->qpvsum);
-    cond_free(e->qdiffs);
-    cond_free(e);
+    free(e->obs);
+    free(e->err);
+    free(e->qerr);
+    free(e->qobs);
+    free(e->final);
+    free(e->qpvsum);
+    free(e->qdiffs);
+    free(e);
 }
 
 
@@ -476,7 +476,7 @@ void err_fm_core(char *fname, faidx_t *fai, fmerr_t *f, htsFormat *open_fmt)
         hash = (b->core.flag & BAM_FREAD1) ? f->hash1: f->hash2;
         if(b->core.tid != last_tid) {
             last_tid = b->core.tid;
-            cond_free(ref);
+            free(ref);
             LOG_DEBUG("Loading ref sequence for contig with name %s.\n", hdr->target_name[b->core.tid]);
             if((ref = fai_fetch(fai, hdr->target_name[b->core.tid], &reflen))== nullptr)
                 LOG_EXIT("[Failed to load ref sequence for contig '%s'. Abort!\n", hdr->target_name[b->core.tid]);
@@ -525,16 +525,22 @@ void err_fm_core(char *fname, faidx_t *fai, fmerr_t *f, htsFormat *open_fmt)
         }
     }
     LOG_INFO("Total records read: %" PRIu64 ". Total records skipped: %" PRIu64 ".\n", f->nread, f->nskipped);
-    cond_free(ref);
+    free(ref);
     bam_destroy1(b);
     bam_hdr_destroy(hdr), sam_close(fp);
 }
 
-
+#ifdef PRINT_ERRORS
+void err_main_core(char *fname, faidx_t *fai, fullerr_t *f, htsFormat *open_fmt, FILE *ofp=nullptr)
+#else
 void err_main_core(char *fname, faidx_t *fai, fullerr_t *f, htsFormat *open_fmt)
+#endif
 {
     if(!f->r1) f->r1 = readerr_init(f->l);
     if(!f->r2) f->r2 = readerr_init(f->l);
+#ifdef PRINT_ERRORS
+    kstring_t ks = ofp ? kstring_t{0, 0, nullptr}: kstring_t{0, 256u, (char *)malloc(256u)};
+#endif
     samFile *fp(sam_open_format(fname, "r", open_fmt));
     bam_hdr_t *hdr(sam_hdr_read(fp));
     if (!hdr)
@@ -578,7 +584,7 @@ void err_main_core(char *fname, faidx_t *fai, fullerr_t *f, htsFormat *open_fmt)
         if(++f->nread % 1000000 == 0) LOG_INFO("Records read: %" PRIu64 ".\n", f->nread);
         if(b->core.tid != last_tid) {
             last_tid = b->core.tid;
-            cond_free(ref);
+            free(ref);
             LOG_DEBUG("Loading ref sequence for contig with name %s.\n", hdr->target_name[b->core.tid]);
             ref = fai_fetch(fai, hdr->target_name[b->core.tid], &len);
             if(ref == nullptr) LOG_EXIT("[Failed to load ref sequence for contig '%s'. Abort!\n", hdr->target_name[b->core.tid]);
@@ -597,26 +603,44 @@ void err_main_core(char *fname, faidx_t *fai, fullerr_t *f, htsFormat *open_fmt)
             case 3:
                 if((b->core.flag & BAM_FREVERSE)) {
                     for(ind = 0; ind < length; ++ind) {
-                        s = bam_seqi(seq, ind + rc);
-                        if(s == dlib::htseq::HTS_N || ref[pos + fc + ind] == 'N') continue;
+                        if((s = bam_seqi(seq, ind + rc)) == dlib::htseq::HTS_N ||
+                            ref[pos + fc + ind] == 'N') continue;
                         cycle = b->core.l_qseq - 1 - ind - rc;
                         assert((int32_t)cycle < b->core.l_qseq);
                         assert(bamseq2i[s] >= 0);
                         if(pv_array && pv_array[cycle] < f->minPV) continue;
                         ++r->obs[bamseq2i[s]][qual[ind + rc] - 2][cycle];
-                        if(seq_nt16_table[(int8_t)ref[pos + fc + ind]] != s)
+#ifdef PRINT_ERRORS
+                        if(seq_nt16_table[(int8_t)ref[pos + fc + ind]] != s) {
                             ++r->err[bamseq2i[s]][qual[ind + rc] - 2][cycle];
+                            if(ks.s) {
+                                ksprintf(&ks, "Error in reverse read %s at index %i: [%c->%c.]\n", bam_get_qname(b), ind, ref[pos + fc + ind], "NACNGNNNTNNNNNNN"[s]);
+                                if(ks.l > 1 << 16) fwrite(ks.s, 1, ks.l, ofp), ks.l = 0;
+                            }
+                        }
+#else
+                        r->err[bamseq2i[s]][qual[ind + rc] - 2][cycle] += (seq_nt16_table[(int8_t)ref[pos + fc + ind]] != s);
+#endif
                     }
                 } else {
                     for(ind = 0; ind < length; ++ind) {
                         cycle = ind + rc;
                         if(pv_array && pv_array[cycle] < f->minPV) continue;
-                        s = bam_seqi(seq, cycle);
-                        assert(bamseq2i[s] >= 0);
-                        if(s == dlib::htseq::HTS_N || ref[pos + fc + ind] == 'N') continue;
+                        assert(bamseq2i[bam_seqi(seq, cycle)] >= 0);
+                        if((s = bam_seqi(seq, cycle)) == dlib::htseq::HTS_N ||
+                            ref[pos + fc + ind] == 'N') continue;
                         ++r->obs[bamseq2i[s]][qual[cycle] - 2][cycle];
-                        if(seq_nt16_table[(int8_t)ref[pos + fc + ind]] != s)
+#ifdef PRINT_ERRORS
+                        if(seq_nt16_table[(int8_t)ref[pos + fc + ind]] != s) {
                             ++r->err[bamseq2i[s]][qual[cycle] - 2][cycle];
+                            if(ks.s) {
+                                ksprintf(&ks, "Error in forward read %s at index %i: [%c->%c.]\n", bam_get_qname(b), ind, ref[pos + fc + ind], "NACNGNNNTNNNNNNN"[s]);
+                                if(ks.l > 1 << 16) fwrite(ks.s, 1, ks.l, ofp), ks.l = 0;
+                            }
+                        }
+#else
+                        r->err[bamseq2i[s]][qual[cycle] - 2][cycle] += (seq_nt16_table[(int8_t)ref[pos + fc + ind]] != s);
+#endif
                     }
                 }
                 rc += length; fc += length;
@@ -624,7 +648,12 @@ void err_main_core(char *fname, faidx_t *fai, fullerr_t *f, htsFormat *open_fmt)
             }
         }
     }
-    cond_free(ref);
+#ifdef PRINT_ERRORS
+    fwrite(ks.s, 1, ks.l, ofp);
+    ks.l = 0;
+    free(ks.s);
+#endif
+    free(ref);
     bam_destroy1(b);
     bam_hdr_destroy(hdr), sam_close(fp);
 }
@@ -903,7 +932,6 @@ fullerr_t fullerr_init(size_t l, char *bedpath, bam_hdr_t *hdr,
 void fullerr_destroy(fullerr_t *e) {
     if(e->r1) readerr_destroy(e->r1), e->r1 = nullptr;
     if(e->r2) readerr_destroy(e->r2), e->r2 = nullptr;
-    cond_free(e->refcontig);
     if(e->bed) kh_destroy(bed, e->bed);
 }
 
@@ -929,8 +957,8 @@ void fm_destroy(fmerr_t *fm) {
     if(fm->bed) kh_destroy(bed, fm->bed);
     kh_destroy(obs, fm->hash1);
     kh_destroy(obs, fm->hash2);
-    cond_free(fm->refcontig);
-    cond_free(fm->bedpath);
+    free(fm->refcontig);
+    free(fm->bedpath);
     free(fm);
 }
 
@@ -973,21 +1001,18 @@ int err_main_main(int argc, char *argv[])
     htsFormat open_fmt{sequence_data, bam, {1, 3}, gzip, 0, nullptr};
     samFile *fp(nullptr);
     bam_hdr_t *header(nullptr);
-    int c, minmq(0);
-    std::string outpath("");
     if(argc < 2) return err_main_usage(EXIT_FAILURE);
-
     if(strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) err_main_usage(EXIT_SUCCESS);
-
-
     FILE *ofp(nullptr), *d3(nullptr), *df(nullptr),
         *dbc(nullptr), *dc(nullptr), *global_fp(nullptr);
-    char refcontig[200] = "";
+#ifdef PRINT_ERRORS
+    FILE *nofp(nullptr);
+#endif
+    // Out file pointer, 3-d error rate fp, full error rates
+    // err by base call, error by cycle, global error, names of reads with errors.
+    std::string refcontig, outpath;
     char *bedpath(nullptr);
-    int padding(-1);
-    int minFM(0);
-    int maxFM(INT_MAX);
-    int flag(0);
+    int minFM(0), maxFM(INT_MAX), flag(0), padding(-1), minmq(0), c;
     uint32_t minPV(0);
     uint64_t min_obs(default_min_obs);
     while ((c = getopt(argc, argv, "a:p:b:r:c:n:f:3:o:g:m:M:S:O:h?FdDP")) >= 0) {
@@ -1004,8 +1029,11 @@ int err_main_main(int argc, char *argv[])
         case 'O': min_obs = strtoull(optarg, nullptr, 10); break;
         case '3': d3 = dlib::open_ofp(optarg); break;
         case 'c': dc = dlib::open_ofp(optarg); break;
+#ifdef PRINT_ERRORS
+        case 'N': nofp = dlib::open_ofp(optarg); break;
+#endif
         case 'n': dbc = dlib::open_ofp(optarg); break;
-        case 'r': std::strcpy(refcontig, optarg); break;
+        case 'r': refcontig = optarg; break;
         case 'b': bedpath = optarg; break;
         case 'p': padding = atoi(optarg); break;
         case 'g': global_fp = dlib::open_ofp(optarg); break;
@@ -1031,6 +1059,7 @@ int err_main_main(int argc, char *argv[])
         LOG_INFO("minPV: %u.\n", minPV);
         dlib::check_bam_tag_exit(argv[optind + 1], "PV");
     }
+
     if(minFM || maxFM != INT_MAX) dlib::check_bam_tag_exit(argv[optind + 1], "FM");
 
     // Get read length from the first read
@@ -1041,9 +1070,13 @@ int err_main_main(int argc, char *argv[])
     sam_close(fp);
     fp = nullptr;
     bam_destroy1(b);
-    if(*refcontig) f.refcontig = strdup(refcontig);
+    if(refcontig.size()) f.refcontig = refcontig.data();
     bam_hdr_destroy(header), header = nullptr;
+#ifdef PRINT_ERRORS
+    err_main_core(argv[optind + 1], fai, &f, &open_fmt, nofp);
+#else
     err_main_core(argv[optind + 1], fai, &f, &open_fmt);
+#endif
     fai_destroy(fai);
     set_max_readlen(&f);
     fill_qvals(&f);

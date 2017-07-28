@@ -1,8 +1,3 @@
-######################################
-# Makefile written by Daniel Baker   #
-#     d.nephi.baker@gmail.com        #
-######################################
-
 CXXSTD=c++11
 CSTD=gnu99
 CC=gcc
@@ -14,7 +9,7 @@ WARN = -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -Wno-
        -Wno-unused-function -Wuninitialized -Wunreachable-code -pedantic
 SHARED = -fno-builtin-gamma -fno-strict-aliasing -fopenmp
 CFLAGS= -DBMF_VERSION=\"$(GIT_VERSION)\" -std=$(CSTD) $(WARN) $(SHARED)
-FLAGS= -DBMF_VERSION=\"$(GIT_VERSION)\" -std=$(CXXSTD) $(WARN) $(SHARED)
+FLAGS= -DBMF_VERSION=\"$(GIT_VERSION)\" -std=$(CXXSTD) $(WARN) $(SHARED) -DPRINT_ERRORS
 LD= -lm -lz -lpthread
 INCLUDE= -Ihtslib -Iinclude -I.
 LIB=
