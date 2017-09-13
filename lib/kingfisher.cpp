@@ -2,27 +2,31 @@
 
 #include "dlib/bam_util.h"
 #include "dlib/io_util.h"
+#include <limits>
 
 namespace bmf {
 
-#define dmp_pos(kfp, bufs, argmaxret, i, index, diffcount)\
-    do {\
-        bufs->cons_quals[i] = pvalue_to_phred(igamc_pvalues(kfp->length, LOG10_TO_CHI2((kfp->phred_sums[index]))));\
-        bufs->agrees[i] = kfp->nuc_counts[index];\
-        diffcount -= bufs->agrees[i];\
-        if(argmaxret != 4) diffcount -= kfp->nuc_counts[i * 5 + 4]; /*(Skip Ns in counting diffs) */\
-        if(bufs->cons_quals[i] > 2 && (double)bufs->agrees[i] / kfp->length > MIN_FRAC_AGREED)\
-            bufs->cons_seq_buffer[i] = num2nuc(argmaxret);\
-        else bufs->cons_quals[i] = 2, bufs->cons_seq_buffer[i] = 'N';\
-    } while(0)
-
 void dmp_process_write(kingfisher_t *kfp, kstring_t *ks, tmpbuffers_t *bufs, int is_rev)
 {
-    int i, diffs(kfp->length * kfp->readlen);
+    int i, j, diffs(kfp->length * kfp->readlen), minind(4);
+    int pvals[5];
+    double minv(std::numeric_limits<double>::max());
+    assert(pvals.size() == 5);
     for(i = 0; i < kfp->readlen; ++i) {
-        const int argmaxret(kfp_argmax(kfp, i));
-        const int index(argmaxret + i * 5);
-        dmp_pos(kfp, bufs, argmaxret, i, index, diffs);
+        for(minind = 4, j = i * 5; j < (i + 1) * 5; ++j) {
+            pvals[j - i * 5] = kfp->phred_sums[j] ? pvalue_to_phred(igamc_pvalues(kfp->length, LOG10_TO_CHI2((kfp->phred_sums[j]))))
+                                                  : 0;
+            if(pvals[j - i * 5] < minv) minv = pvals[j - i * 5], minind = j - i * 5;
+        }
+        for(j = 0; j < 5; ++j) if(j != minind) pvals[minind] -= pvals[j];
+        if(pvals[minind] < 0) pvals[minind] = 0;
+        bufs->cons_quals[i] = pvals[minind];
+        bufs->agrees[i]     = kfp->nuc_counts[minind + i * 5];
+        diffs          -= bufs->agrees[i];
+        if(minind != 4) diffs -= kfp->nuc_counts[i * 5 + 4];
+        if(bufs->cons_quals[i] > 2 && (double)bufs->agrees[i] / kfp->length > MIN_FRAC_AGREED)
+            bufs->cons_seq_buffer[i] = num2nuc(minind);
+        else bufs->cons_quals[i] = 2, bufs->cons_seq_buffer[i] = 'N';
     }
     kputc('@', ks); kputs(kfp->barcode + 1, ks); kputc(' ', ks); 
     kfill_both(kfp->readlen, bufs->agrees, bufs->cons_quals, ks);
@@ -74,29 +78,77 @@ std::vector<std::vector<double>> get_igamc_thresholds(size_t max_family_size, in
 // Note: You print kfpf->barcode + 1 because that skips the F/R/Z char.
 void zstranded_process_write(kingfisher_t *kfpf, kingfisher_t *kfpr, kstring_t *ks, tmpbuffers_t *bufs)
 {
-    const int FM (kfpf->length + kfpr->length);
-    int diffs(FM * kfpf->readlen), index, i;
+    const int FM(kfpf->length + kfpr->length);
+    int diffs(FM * kfpf->readlen), index, i, j,
+        fminv(std::numeric_limits<int>::max()), rminv(fminv),
+        fminind, rminind, fpsums[5], rpsums[5];
     for(i = 0; i < kfpf->readlen; ++i) {
-        const int argmaxretf(kfp_argmax(kfpf, i)); // Forward consensus nucleotide
-        const int argmaxretr(kfp_argmax(kfpr, i)); // Reverse consensus nucleotide
-        if(argmaxretf == argmaxretr) { // Both strands supported the same base call.
-            index = i * 5 + argmaxretf;
-            kfpf->phred_sums[index] += kfpr->phred_sums[index];
+        for(rminind = fminind = 4, j = i * 5; j < (i + 1) * 5; ++j) {
+            if((fpsums[j - i * 5] = kfpr->phred_sums[j]) < fminv) 
+                fminv = fpsums[j - i * 5], fminind = j - i * 5;
+            if((rpsums[j - i * 5] = kfpr->phred_sums[j]) < rminv) 
+                rminv = rpsums[j - i * 5], rminind = j - i * 5;
+        }
+#if 0
+        if(psums[minind] < 0) psums[minind] = 0;
+        bufs->cons_quals[i] = psums[minind];
+        bufs->agrees[i]     = kfp->nuc_counts[minind + i * 5];
+        diffs          -= bufs->agrees[i];
+        if(minind != 4) diffs -= kfp->nuc_counts[i * 5 + 4];
+        if(bufs->cons_quals[i] > 2 && (double)bufs->agrees[i] / kfp->length > MIN_FRAC_AGREED)
+            bufs->cons_seq_buffer[i] = num2nuc(minind);
+        else bufs->cons_quals[i] = 2, bufs->cons_seq_buffer[i] = 'N';
+#endif
+        if(fminind == rminind) { // Both strands supported the same base call.
+            index = i * 5 + fminind;
+            for(j = 0; j < 5; ++j) {
+                fpsums[j] = pvalue_to_phred(igamc_pvalues(kfpf->length, LOG10_TO_CHI2((kfpf->phred_sums[j] + kfpr->phred_sums[j]))));
+            }
+            for(j = 0; j < 5; ++j) if(j != fminind) fpsums[fminind] -= fpsums[j];
+            if(fpsums[fminind] < 0) fpsums[fminind] = 0;
             kfpf->nuc_counts[index] += kfpr->nuc_counts[index];
-            dmp_pos(kfpf, bufs, argmaxretf, i, index, diffs);
+            bufs->cons_quals[i] = fpsums[fminind];
+            bufs->agrees[i]     = kfpf->nuc_counts[index] + kfpr->nuc_counts[index];
+            diffs              -= bufs->agrees[i];
+            if(fminind != 4) diffs -= kfpf->nuc_counts[i * 5 + 4] + kfpr->nuc_counts[i * 5 + 4];
             if(kfpr->max_phreds[index] > kfpf->max_phreds[index]) kfpf->max_phreds[index] = kfpr->max_phreds[index];
-        } else if(argmaxretf == 4) { // Forward is N'd and reverse is not. Reverse call is probably right.
-            index = i * 5 + argmaxretr;
+            if(bufs->cons_quals[i] > 2 && (double)bufs->agrees[i] / kfpf->length > MIN_FRAC_AGREED)
+                bufs->cons_seq_buffer[i] = num2nuc(fminind);
+            else bufs->cons_quals[i] = 2, bufs->cons_seq_buffer[i] = 'N';
+        } else if(fminind == 4) { // Forward is N'd and reverse is not. Reverse call is probably right.
+            index = i * 5 + rminind;
             kfpf->phred_sums[index] += kfpr->phred_sums[index];
             kfpf->nuc_counts[index] += kfpr->nuc_counts[index];
-            dmp_pos(kfpf, bufs, argmaxretr, i, index, diffs);
             kfpf->max_phreds[index] = kfpr->max_phreds[index];
-        } else if(argmaxretr == 4) { // Forward is N'd and reverse is not. Reverse call is probably right.
-            index = i * 5 + argmaxretf;
+            diffs -= kfpr->nuc_counts[index];
+            for(j = 0; j < 5; ++j) {
+                rpsums[j] = pvalue_to_phred(igamc_pvalues(kfpr->length, LOG10_TO_CHI2((kfpf->phred_sums[j] + kfpr->phred_sums[j]))));
+            }
+            for(j = 0; j < 5; ++j) if(j != rminind) rpsums[rminind] -= rpsums[j];
+            if(rpsums[rminind] < 0) rpsums[rminind] = 0;
+            bufs->cons_quals[i] = rpsums[rminind];
+            bufs->agrees[i] = kfpf->nuc_counts[rminind + i * 5] + kfpr->nuc_counts[rminind + i * 5];
+            diffs -= bufs->agrees[i];
+            diffs -= kfpf->nuc_counts[4 + i * 5] + kfpr->nuc_counts[4 + i * 5];
+            if(bufs->cons_quals[i] > 2 && (double)bufs->agrees[i] / kfpr->length > MIN_FRAC_AGREED)
+                bufs->cons_seq_buffer[i] = num2nuc(fminind);
+            else bufs->cons_quals[i] = 0, bufs->cons_seq_buffer[i] = 'N';
+        } else if(rminind == 4) { // Forward is N'd and reverse is not. Reverse call is probably right.
+            index = i * 5 + fminind;
             kfpf->phred_sums[index] += kfpr->phred_sums[index];
             kfpf->nuc_counts[index] += kfpr->nuc_counts[index];
-            dmp_pos(kfpf, bufs, argmaxretf, i, index, diffs);
-            // Don't update max_phreds, since the max phred is already here.
+            diffs -= kfpf->nuc_counts[index];
+            for(j = 0; j < 5; ++j) {
+                fpsums[j] = pvalue_to_phred(igamc_pvalues(kfpf->length, LOG10_TO_CHI2((kfpf->phred_sums[j] + kfpr->phred_sums[j]))));
+            }
+            for(j = 0; j < 5; ++j) if(j != fminind) fpsums[fminind] -= fpsums[j];
+            if(fpsums[fminind] < 0) fpsums[fminind] = 0;
+            bufs->cons_quals[i] = fpsums[fminind];
+            bufs->agrees[i] = kfpf->nuc_counts[fminind + i * 5] + kfpr->nuc_counts[fminind + i * 5];
+            diffs -= bufs->agrees[i];
+            diffs -= kfpf->nuc_counts[4 + i * 5] + kfpr->nuc_counts[4 + i * 5];
+            if(bufs->cons_quals[i] > 2 && (double)bufs->agrees[i] / kfpr->length > MIN_FRAC_AGREED) bufs->cons_seq_buffer[i] = num2nuc(fminind);
+            else bufs->cons_quals[i] = 0, bufs->cons_seq_buffer[i] = 'N';
         } else bufs->cons_quals[i] = 0, bufs->agrees[i] = 0, bufs->cons_seq_buffer[i] = 'N';
     }
     ksprintf(ks, "@%s ", kfpf->barcode + 1);
