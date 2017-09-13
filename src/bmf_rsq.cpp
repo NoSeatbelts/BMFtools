@@ -46,7 +46,7 @@ struct LevenshteinDistance {
         const char *bn(bam_get_qname(b)), *pn(bam_get_qname(p));
         assert(b->core.l_qname == p->core.l_qname);
         unsigned nlen(b->core.l_qseq + 1);
-        assert(mat.size() & 1 == 0);
+        assert((mat.size() & 1) == 0);
         if(UNLIKELY(mat.size() == 0)) {
             mat.resize(nlen * nlen);
             for(unsigned i(0); i < nlen; ++i) mat[i] = mat[nlen * i] = i;

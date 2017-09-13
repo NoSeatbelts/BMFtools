@@ -488,9 +488,9 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
         }
 
         idx = kh_value(sq_tids, iter);
-        if (idx >= old_n_targets) {
+        if (idx >= (int)old_n_targets) {
             // is a new SQ, so record position so we can add it to out_text.
-            assert(idx < merged_hdr->n_targets);
+            assert(idx < (int)merged_hdr->n_targets);
             ptrdiff_t off = text - translate->text;
             new_sq_matches[idx - old_n_targets].rm_so = matches[0].rm_so + off;
             new_sq_matches[idx - old_n_targets].rm_eo = matches[0].rm_eo + off;

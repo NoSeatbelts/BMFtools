@@ -11,7 +11,6 @@ void dmp_process_write(kingfisher_t *kfp, kstring_t *ks, tmpbuffers_t *bufs, int
     int i, j, diffs(kfp->length * kfp->readlen), minind(4);
     int pvals[5];
     double minv(std::numeric_limits<double>::max());
-    assert(pvals.size() == 5);
     for(i = 0; i < kfp->readlen; ++i) {
         for(minind = 4, j = i * 5; j < (i + 1) * 5; ++j) {
             pvals[j - i * 5] = kfp->phred_sums[j] ? pvalue_to_phred(igamc_pvalues(kfp->length, LOG10_TO_CHI2((kfp->phred_sums[j]))))
